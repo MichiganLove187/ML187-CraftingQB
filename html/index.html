@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crafting System</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="script.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div id="crafting-container">
+        <div id="crafting-header">
+            <button id="close-menu"><i class="fas fa-times"></i></button>
+            <h2 id="bench-name">Crafting Bench</h2>
+        </div>
+        
+        <div id="player-stats">
+            <div id="level-container">
+                <span><i class="fas fa-star" style="color: #f1c40f; margin-right: 5px;"></i>Level: <span id="player-level">1</span></span>
+            </div>
+            <div id="xp-container">
+                <div id="xp-bar">
+                    <div id="xp-progress"></div>
+                </div>
+                <span id="xp-text">XP: 0/100</span>
+            </div>
+        </div>
+        
+        <div id="crafting-content">
+            <div id="recipes-section">
+                <h3><i class="fas fa-book" style="margin-right: 8px;"></i>Available Recipes</h3>
+                <div id="recipes-container">
+                    <!-- Recipes will populate here -->
+                </div>
+            </div>
+            
+            <div id="right-panel">
+                <div id="selected-item-info">
+                    <h3><i class="fas fa-hammer" style="margin-right: 8px;"></i>Select an item to craft</h3>
+                    <div id="materials-list">
+                        <!-- Materials willpopulate here -->
+                    </div>
+                    <div id="crafting-controls">
+                        <div id="quantity-section"></div>
+                        <button id="craft-btn" disabled><i class="fas fa-plus" style="margin-right: 5px;"></i>Craft Item</button>
+                    </div>
+                </div>
+                
+                <div id="crafting-queue">
+                    <h3><i class="fas fa-tasks" style="margin-right: 8px;"></i>Crafting Queue</h3>
+                    <div id="queue-container">
+                        <!-- Queue items will populate here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
