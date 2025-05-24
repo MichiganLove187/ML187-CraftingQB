@@ -1,7 +1,6 @@
 Config = {}
 
 Config.DefaultCraftingTime = 15 -- Default crafting time in seconds if not specified in the recipe
-
 Config.CraftingBenches = {
     {
         name = "Weapon Bench",
@@ -15,8 +14,53 @@ Config.CraftingBenches = {
         radius = 2.0,
         recipes = {"weapon_dagger", "weapon_bat","armor", "radio"} -- List of craftable items at this bench
     },
+    {
+        name = "Drug Bench",
+        coords = vector3(706.76, -964.67, 36.85),
+        radius = 2.0,
+        recipes = {"weed_ak47", "oxy"} -- List of craftable items at this bench
+    },
     -- Add more benches as needed
 }
+
+-- Add repair costs to the config
+Config.RepairCosts = {
+    ["weapon_pistol"] = {
+        materials = {
+            ["iron"] = 2,
+            ["steel"] = 1,
+        },
+        levelRequired = 0,
+    },
+    ["weapon_smg"] = {
+        materials = {
+            ["iron"] = 3,
+            ["steel"] = 2,
+        },
+        levelRequired = 3,
+    },
+    ["weapon_microsmg"] = {
+        materials = {
+            ["iron"] = 3,
+            ["steel"] = 2,
+        },
+        levelRequired = 5,
+    },
+    ["weapon_dagger"] = {
+        materials = {
+            ["iron"] = 1,
+        },
+        levelRequired = 0,
+    },
+    ["weapon_bat"] = {
+        materials = {
+            ["iron"] = 1,
+        },
+        levelRequired = 1,
+    },
+    -- Add more weapons as needed
+}
+
 
 Config.Recipes = {
     ["weapon_pistol"] = {
@@ -75,6 +119,22 @@ Config.Recipes = {
     },
     ["radio"] = {
         name = "Radio",
+        materials = {
+            ["iron"] = 1,
+        },
+        levelRequired = 2,
+        xpGained = 2,
+    },
+    ["weed_ak47"] = {
+        name = "Ak47",
+        materials = {
+            ["iron"] = 1,
+        },
+        levelRequired = 2,
+        xpGained = 2,
+    },
+    ["oxy"] = {
+        name = "Oxy",
         materials = {
             ["iron"] = 1,
         },
