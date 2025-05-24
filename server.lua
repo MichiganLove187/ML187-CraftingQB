@@ -178,3 +178,100 @@ QBCore.Functions.CreateCallback('crafting:server:GetPlayerInventory', function(s
     cb(inventory)
 end)
 
+--- added REPAIR
+
+QBCore.Functions.CreateCallback('crafting:server:GetPlayerWeapons', function(source, cb)
+    local Player = QBCore.Functions.GetPlayer(source)
+    if not Player then return cb({}) end
+    
+    local weapons = {}
+    
+    for _, item in pairs(Player.PlayerData.items) do
+        if item and item.type == "weapon" then
+            local condition = 100
+            if item.info and item.info.quality then
+                condition = item.info.quality
+            end
+            
+            table.insert(weapons, {
+                name = item.name,
+                label = QBCore.Shared.Items[item.name].label,
+                slot = item.slot,
+                condition = condition
+            })
+        end
+    end
+    
+    cb(weapons)
+end)
+
+RegisterNetEvent('crafting:server:RepairWeapon', function(weaponSlot, repairCost)
+    local src = source
+    local Player = QBCore.Functions.GetPlayer(src)
+    
+    print("Server: RepairWeapon event triggered")
+    print("Player: " .. tostring(src))
+    print("Weapon slot: " .. tostring(weaponSlot))
+    
+    if not Player then 
+        print("Player not found")
+        return 
+    end
+    
+    local weapon = Player.Functions.GetItemBySlot(weaponSlot)
+    
+    if not weapon or weapon.type ~= "weapon" then
+        print("Weapon not found or not a weapon type")
+        TriggerClientEvent('QBCore:Notify', src, "Weapon not found!", "error")
+        return
+    end
+    
+    print("Found weapon: " .. weapon.name)
+    
+    local repairConfig = Config.RepairCosts[weapon.name]
+    if not repairConfig then
+        print("No repair config for: " .. weapon.name)
+        TriggerClientEvent('QBCore:Notify', src, "This weapon cannot be repaired!", "error")
+        return
+    end
+    
+    local craftingLevel = GetCraftingLevel(src)
+    if craftingLevel < repairConfig.levelRequired then
+        TriggerClientEvent('QBCore:Notify', src, "You don't have the required level to repair this weapon!", "error")
+        return
+    end
+    
+    local hasMaterials = true
+    local materialsToRemove = {}
+    
+    for material, amount in pairs(repairConfig.materials) do
+        local playerHas = Player.Functions.GetItemByName(material)
+        
+        if not playerHas or playerHas.amount < amount then
+            hasMaterials = false
+            break
+        end
+        
+        materialsToRemove[material] = amount
+    end
+    
+    if not hasMaterials then
+        TriggerClientEvent('QBCore:Notify', src, "You don't have all the required materials for repair!", "error")
+        return
+    end
+    
+    for material, amount in pairs(materialsToRemove) do
+        Player.Functions.RemoveItem(material, amount)
+        TriggerClientEvent('inventory:client:ItemBox', src, QBCore.Shared.Items[material], "remove", amount)
+    end
+    
+    local info = weapon.info or {}
+    info.quality = 100
+    
+    Player.Functions.RemoveItem(weapon.name, 1, weapon.slot)
+    Player.Functions.AddItem(weapon.name, 1, weapon.slot, info)
+    
+    AddCraftingXP(src, math.floor(repairConfig.levelRequired * 5) + 5)
+    
+    TriggerClientEvent('QBCore:Notify', src, "Weapon repaired successfully!", "success")
+end)
