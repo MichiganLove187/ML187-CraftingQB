@@ -23,7 +23,7 @@ RegisterNUICallback('craftItem', function(data, cb)
         recipe = recipe,
         quantity = quantity,
         progress = 0,
-        id = math.random(1000000, 9999999)
+        id = math.random(1000000, 9999999) 
     })
     
     SendNUIMessage({
@@ -245,3 +245,71 @@ function DrawText3D(x, y, z, text)
     DrawRect(0.0, 0.0+0.0125, 0.017+ factor, 0.03, 0, 0, 0, 75)
     ClearDrawOrigin()
 end
+
+RegisterNUICallback('openRepairMenu', function(data, cb)
+    local bench = currentBench
+    OpenRepairMenu(bench)
+    cb('ok')
+end)
+
+RegisterNUICallback('repairWeapon', function(data, cb)
+    
+    local weaponSlot = data.weaponHash
+    local repairCost = data.repairCost
+    
+    TriggerServerEvent('crafting:server:RepairWeapon', weaponSlot, repairCost)
+    
+    cb('ok')
+end)
+
+function OpenRepairMenu(bench)
+    QBCore.Functions.TriggerCallback('crafting:server:GetPlayerWeapons', function(weapons)
+        local repairableWeapons = {}
+        
+        for _, weapon in pairs(weapons) do
+            if IsWeaponRepairableAtBench(weapon.name, bench) then
+                table.insert(repairableWeapons, weapon)
+            end
+        end
+        
+        local playerItems = QBCore.Functions.GetPlayerData().items
+        local inventory = {}
+        
+        for slot, item in pairs(playerItems) do
+            if item then
+                local itemName = item.name
+                if not itemName and item.item then
+                    itemName = item.item
+                end
+                
+                if itemName then
+                    inventory[itemName] = (inventory[itemName] or 0) + (item.amount or 1)
+                end
+            end
+        end
+        
+        for itemName, amount in pairs(inventory) do
+        end
+        
+        SendNUIMessage({
+            action = 'openRepairMenu',
+            weapons = repairableWeapons,
+            repairCosts = Config.RepairCosts,
+            inventory = inventory,
+            level = craftingLevel
+        })
+        
+        SetNuiFocus(true, true)
+    end)
+end
+
+function IsWeaponRepairableAtBench(weaponName, bench)
+    for _, recipe in ipairs(bench.recipes) do
+        if recipe == weaponName then
+            return true
+        end
+    end
+    
+    return false
+end
+
