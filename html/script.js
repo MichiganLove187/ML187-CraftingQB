@@ -9,10 +9,14 @@ let craftQuantity = 1;
 let maxCraftable = 1;
 let craftingQueue = [];
 
+let isRepairMode = false;
+let selectedWeapon = null;
+let playerWeapons = [];
+let repairCosts = {};
+
 $(document).ready(function() {
     window.addEventListener('message', function(event) {
         const data = event.data;
-
         if (data.action === 'open') {
             openCraftingMenu(data);
         } else if (data.action === 'close') {
@@ -24,6 +28,8 @@ $(document).ready(function() {
             playerXP = data.xp;
             nextLevelXP = data.nextLevelXP;
             updatePlayerStats();
+        } else if (data.action === 'openRepairMenu') {
+            openRepairMenu(data);
         }
     });
 
@@ -56,6 +62,36 @@ $(document).ready(function() {
             closeCraftingMenu();
         }
     });
+    
+    $('#repair-toggle').click(function() {
+        toggleRepairMode();
+    });
+    
+    $('#repair-btn').click(function() {
+        
+        if (selectedWeapon) {
+            
+            $.post('https://ml187-crafting/repairWeapon', JSON.stringify({
+                weaponHash: selectedWeapon.slot,
+                repairCost: repairCosts[selectedWeapon.name]
+            }));
+            
+            selectedWeapon = null;
+            updateRepairDetails();
+            
+            toggleRepairMode();
+        }
+    });
+    
+    $(document).on('click', '.weapon-item', function() {
+        if ($(this).hasClass('locked')) return;
+        
+        const weaponIndex = $(this).data('index');
+        $('.weapon-item').removeClass('selected');
+        $(this).addClass('selected');
+        selectedWeapon = playerWeapons[weaponIndex];
+        updateRepairDetails();
+    });
 });
 
 function openCraftingMenu(data) {
@@ -67,7 +103,7 @@ function openCraftingMenu(data) {
     playerInventory = data.inventory;
     craftingQueue = data.queue || [];
     craftQuantity = 1;
-
+    
     $('#bench-name').text(currentBench.name);
     
     updatePlayerStats();
@@ -75,6 +111,11 @@ function openCraftingMenu(data) {
     populateRecipes();
     
     updateCraftingQueue(craftingQueue);
+    
+    isRepairMode = false;
+    $('#repair-menu').hide();
+    $('#crafting-content').show();
+    $('#repair-toggle').html('<i class="fas fa-wrench"></i> Repair');
     
     $('body').fadeIn(300);
 }
@@ -227,7 +268,7 @@ function calculateMaxCraftable(recipe) {
         maxAmount = Math.min(maxAmount, canCraft);
     }
     
-    return Math.max(1, maxAmount); 
+    return Math.max(1, maxAmount);
 }
 
 function updateQuantityDisplay() {
@@ -268,4 +309,143 @@ function updateCraftingQueue(queue) {
             </div>
         `);
     });
+}
+
+function toggleRepairMode() {
+    isRepairMode = !isRepairMode;
+    
+    if (isRepairMode) {
+        $('#crafting-content').hide();
+        $('#repair-menu').show();
+        $('#repair-toggle').html('<i class="fas fa-hammer"></i> Craft');
+        
+        $.post('https://ml187-crafting/openRepairMenu');
+    } else {
+        $('#repair-menu').hide();
+        $('#crafting-content').show();
+        $('#repair-toggle').html('<i class="fas fa-wrench"></i> Repair');
+        
+        selectedWeapon = null;
+    }
+}
+
+function openRepairMenu(data) {
+    
+    playerWeapons = data.weapons || [];
+    repairCosts = data.repairCosts || {};
+    playerInventory = data.inventory || {};
+    playerLevel = data.level || 1;
+    
+    
+    populateWeaponsList();
+    
+    updateRepairDetails();
+}
+
+function populateWeaponsList() {
+    const container = $('#weapons-list');
+    container.empty();
+    
+    if (!playerWeapons || playerWeapons.length === 0) {
+        container.html('<div class="no-recipes">No weapons to repair</div>');
+        return;
+    }
+    
+    playerWeapons.forEach((weapon, index) => {
+        let conditionColor;
+        if (weapon.condition >= 80) {
+            conditionColor = '#2ecc71'; // Green
+        } else if (weapon.condition >= 50) {
+            conditionColor = '#f39c12'; // Orange
+        } else {
+            conditionColor = '#e74c3c'; // Red
+        }
+        
+        const canRepair = repairCosts[weapon.name] && 
+                          playerLevel >= repairCosts[weapon.name].levelRequired &&
+                          weapon.condition < 100;
+        
+        
+        const weaponElement = $(`
+            <div class="weapon-item ${!canRepair ? 'locked' : ''}" data-index="${index}">
+                <img src="nui://qb-inventory/html/images/${weapon.name}.png" onerror="this.src='nui://qb-inventory/html/images/placeholder.png'" class="weapon-image">
+                <div class="weapon-name">${weapon.label}</div>
+                <div class="weapon-condition">
+                    <div class="condition-bar" style="width: ${weapon.condition}%; background-color: ${conditionColor}"></div>
+                </div>
+                <div style="color: #bdc3c7; font-size: 12px; margin-top: 5px;">${weapon.condition}%</div>
+            </div>
+        `);
+        
+        if (!canRepair) {
+            weaponElement.css('opacity', '0.5');
+            weaponElement.css('cursor', 'not-allowed');
+        }
+        
+        container.append(weaponElement);
+    });
+}
+
+
+function updateRepairDetails() {
+    const detailsContainer = $('#repair-details');
+    const materialsList = $('#repair-materials-list');
+    
+    if (!selectedWeapon) {
+        detailsContainer.find('h4').text('Select a weapon to repair');
+        materialsList.empty();
+        $('#repair-btn').prop('disabled', true);
+        return;
+    }
+    
+    const repairCost = repairCosts[selectedWeapon.name];
+    if (!repairCost) {
+        detailsContainer.find('h4').text('This weapon cannot be repaired');
+        materialsList.empty();
+        $('#repair-btn').prop('disabled', true);
+        return;
+    }
+    
+    detailsContainer.find('h4').text(`Repair ${selectedWeapon.label} (${selectedWeapon.condition}%)`);
+    materialsList.empty();
+    
+    let canRepair = true;
+    
+    if (!repairCost.materials) {
+        materialsList.append(`
+            <div class="material-item insufficient">
+                <span>Error: Repair materials not defined for this weapon</span>
+            </div>
+        `);
+        $('#repair-btn').prop('disabled', true);
+        return;
+    }
+    
+    
+    for (const [material, amount] of Object.entries(repairCost.materials)) {
+        const playerHas = playerInventory[material] || 0;
+        
+        const sufficient = playerHas >= amount;
+        if (!sufficient) canRepair = false;
+        
+        materialsList.append(`
+            <div class="material-item ${sufficient ? '' : 'insufficient'}">
+                <img src="nui://qb-inventory/html/images/${material}.png" onerror="this.src='nui://qb-inventory/html/images/placeholder.png'" class="material-icon">
+                <span>${amount}x ${material} (${playerHas})</span>
+            </div>
+        `);
+    }
+    
+    const levelSufficient = playerLevel >= repairCost.levelRequired;
+    if (!levelSufficient) canRepair = false;
+    
+    materialsList.append(`
+        <div class="material-item ${levelSufficient ? '' : 'insufficient'}">
+            <i class="fas fa-star" style="color: #f1c40f; margin-right: 10px; font-size: 20px;"></i>
+            <span>Level ${repairCost.levelRequired} Required (Current: ${playerLevel})</span>
+        </div>
+    `);
+    
+    const canRepairCondition = selectedWeapon.condition < 100;
+    $('#repair-btn').prop('disabled', !canRepair || !canRepairCondition);
 }
