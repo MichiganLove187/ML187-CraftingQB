@@ -8,13 +8,15 @@ version '1.0.0'
 
 client_scripts {
     'config.lua',
-    'client/main.lua'
+    'client/main.lua',
+    'client/cl_bench.lua'
 }
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'config.lua',
-    'server/main.lua'
+    'server/main.lua',
+    'server/sv_bench.lua'
 }
 
 ui_page 'html/index.html'
