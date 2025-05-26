@@ -1,6 +1,37 @@
 Config = {}
 
 Config.DefaultCraftingTime = 15 -- Default crafting time in seconds if not specified in the recipe
+
+Config.PlaceableBenches = {
+    Enabled = true,
+    UseQBTarget = true, -- Set to false to use DrawText instead
+    MaxPerPlayer = 3,
+    
+    Types = {
+        ["weapon_bench"] = {
+            name = "Weapon Bench", --- NAME OF BENCH
+            item = "crafting_weapon_bench", --- ITEM NAME
+            model = "prop_tool_bench02", --- PROP
+            recipes = {"weapon_pistol", "weapon_smg", "weapon_microsmg"}, -- ADD RECIPIES
+            zOffset = 1.0 -- Height offset for text/target
+        },
+        ["melee_bench"] = {
+            name = "Melee Bench",
+            item = "crafting_melee_bench",
+            model = "prop_tool_bench02",
+            recipes = {"weapon_dagger", "weapon_bat", "armor", "radio"},
+            zOffset = 1.0
+        },
+        ["drug_bench"] = {
+            name = "Drug Bench",
+            item = "crafting_drug_bench",
+            model = "bkr_prop_weed_table_01a",
+            recipes = {"weed_ak47", "oxy"},
+            zOffset = 0.5
+        }
+    }
+}
+
 Config.CraftingBenches = {
     {
         name = "Weapon Bench",
