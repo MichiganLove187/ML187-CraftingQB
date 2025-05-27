@@ -4,7 +4,7 @@ game 'gta5'
 author 'ML187-SCRIPTS'
 name "ml187-crafting"
 description 'crafting system'
-version '1.0.0'
+version '2.0.0'
 
 client_scripts {
     'config.lua',
