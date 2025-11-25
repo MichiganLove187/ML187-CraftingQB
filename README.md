@@ -1,5 +1,8 @@
 ML187-Crafting
-
+-- 11/25/25
+UPDATED BROKEN RAY CASTING!!
+everything should work as it should if theres any questions or concerns reach out to me in my discord 
+https://discord.gg/kzWsScd2fC
 
 INSALL SIMPLY DRAG AND DROP SET UP CONFIG HOW YOUD LIKE 
 
@@ -54,3 +57,4 @@ ADD THESE ITEMS TO QBCORE SHARED
 
 
 AND AGAIN DO NOT FORGET TO RENAME SCRIPT TO ml187-crafting 
+
