@@ -19,13 +19,14 @@ server_scripts {
     'server/sv_bench.lua'
 }
 
-ui_page 'html/crafting.html'
+ui_page 'html/index.html'
 
 files {
-    'html/crafting.html',
-    'html/crafting.css',
-    'html/crafting.js'
+    'html/index.html',
+    'html/style.css',
+    'html/script.js'
 }
 
 lua54 'yes'
+
 
