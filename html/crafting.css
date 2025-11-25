@@ -29,7 +29,6 @@ body {
     overflow: hidden;
 }
 
-/* Header - Matching Shop Style */
 #crafting-header {
     background: linear-gradient(135deg, #1e3a8a 0%, #000000 100%);
     padding: 20px;
@@ -97,7 +96,6 @@ body {
     transform: translateY(-50%) scale(1.05);
 }
 
-/* Player Stats - Matching Shop Style */
 #player-stats {
     background: #111111;
     padding: 15px 20px;
@@ -147,7 +145,6 @@ body {
     min-width: 100px;
 }
 
-/* Main Content Layout */
 #crafting-content {
     display: flex;
     flex: 1;
@@ -244,7 +241,6 @@ body {
     border-radius: 10px;
 }
 
-/* Right Panel */
 #right-panel {
     flex: 1;
     display: flex;
@@ -338,7 +334,6 @@ body {
     margin-bottom: 8px;
 }
 
-/* Crafting Controls */
 #crafting-controls {
     display: flex;
     flex-direction: column;
@@ -425,7 +420,6 @@ body {
     transform: none;
 }
 
-/* Crafting Queue */
 #crafting-queue {
     height: 220px;
     padding: 20px;
@@ -532,7 +526,6 @@ body {
     transform: scale(1.1);
 }
 
-/* Repair Menu */
 #repair-menu {
     padding: 20px;
     background: #000000;
@@ -684,7 +677,6 @@ body {
     transform: none;
 }
 
-/* Utility Classes */
 .no-recipes {
     color: #666;
     text-align: center;
@@ -692,7 +684,6 @@ body {
     padding: 20px;
 }
 
-/* Scrollbar Styling */
 ::-webkit-scrollbar {
     width: 8px;
 }
@@ -711,7 +702,6 @@ body {
     background: #ea580c;
 }
 
-/* Responsive Design */
 @media (max-width: 1200px) {
     #crafting-container {
         width: 95%;
@@ -721,4 +711,5 @@ body {
     #recipes-container {
         grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
     }
+
 }
