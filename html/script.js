@@ -17,6 +17,8 @@ let repairCosts = {};
 $(document).ready(function() {
     window.addEventListener('message', function(event) {
         const data = event.data;
+        console.log('NUI Message:', data.action);
+        
         if (data.action === 'open') {
             openCraftingMenu(data);
         } else if (data.action === 'close') {
@@ -30,6 +32,22 @@ $(document).ready(function() {
             updatePlayerStats();
         } else if (data.action === 'openRepairMenu') {
             openRepairMenu(data);
+        } else if (data.action === 'updateInventory') {
+            playerInventory = data.inventory || {};
+            console.log('Inventory updated:', playerInventory);
+            
+            if (selectedRecipe) {
+                updateSelectedItemInfo();
+            }
+            
+            if (isRepairMode && selectedWeapon) {
+                updateRepairDetails();
+            }
+        } else if (data.action === 'updateSelectedRecipe') {
+            if (data.item && recipes[data.item]) {
+                selectedRecipe = data.item;
+                updateSelectedItemInfo();
+            }
         }
     });
 
@@ -38,15 +56,52 @@ $(document).ready(function() {
     });
 
     $('#craft-btn').click(function() {
-        if (selectedRecipe) {
+        console.log('Craft button clicked');
+        console.log('Selected recipe:', selectedRecipe);
+        console.log('Current bench:', currentBench);
+        console.log('Current quantity:', craftQuantity);
+        
+        if (selectedRecipe && currentBench) {
+            const quantityInput = $('#craft-quantity');
+            let quantity = parseInt(quantityInput.val()) || 1;
+            
+            if (quantity < 1 || quantity > 100) {
+                alert('Quantity must be between 1 and 100');
+                quantityInput.val(1);
+                quantity = 1;
+                return;
+            }
+            
+            if (quantity > maxCraftable) {
+                alert(`You can only craft ${maxCraftable} with your current materials`);
+                quantityInput.val(maxCraftable);
+                quantity = maxCraftable;
+                return;
+            }
+            
+            console.log('Sending craft request:', {
+                item: selectedRecipe,
+                quantity: quantity,
+                benchType: currentBench.name
+            });
+            
             $.post('https://ml187-crafting/craftItem', JSON.stringify({
                 item: selectedRecipe,
-                recipe: recipes[selectedRecipe],
-                quantity: craftQuantity
-            }));
-            
-            craftQuantity = 1;
-            updateQuantityDisplay();
+                quantity: quantity,
+                benchType: currentBench.name
+            }), function(response) {
+                console.log('Craft response:', response);
+                if (response === 'ok') {
+                    craftQuantity = 1;
+                    updateQuantityDisplay();
+                }
+            }).fail(function(error) {
+                console.error('Craft request failed:', error);
+            });
+        } else {
+            console.error('Cannot craft: missing selectedRecipe or currentBench');
+            if (!selectedRecipe) console.error('No recipe selected');
+            if (!currentBench) console.error('No current bench');
         }
     });
 
@@ -68,12 +123,10 @@ $(document).ready(function() {
     });
     
     $('#repair-btn').click(function() {
-        
-        if (selectedWeapon) {
-            
+        if (selectedWeapon && currentBench) {
             $.post('https://ml187-crafting/repairWeapon', JSON.stringify({
                 weaponHash: selectedWeapon.slot,
-                repairCost: repairCosts[selectedWeapon.name]
+                benchType: currentBench.name
             }));
             
             selectedWeapon = null;
@@ -104,12 +157,16 @@ function openCraftingMenu(data) {
     craftingQueue = data.queue || [];
     craftQuantity = 1;
     
-    $('#bench-name').text(currentBench.name);
+    console.log('Opening crafting menu:', {
+        benchName: currentBench ? currentBench.name : 'No bench',
+        recipesCount: Object.keys(recipes).length,
+        inventoryCount: Object.keys(playerInventory).length
+    });
+    
+    $('#bench-name').text(currentBench ? currentBench.name : 'Unknown Bench');
     
     updatePlayerStats();
-    
     populateRecipes();
-    
     updateCraftingQueue(craftingQueue);
     
     isRepairMode = false;
@@ -147,12 +204,20 @@ function populateRecipes() {
     const container = $('#recipes-container');
     container.empty();
     
+    if (!currentBench || !currentBench.recipes) {
+        container.html('<div class="no-recipes">No bench recipes available</div>');
+        return;
+    }
+    
     const benchRecipes = currentBench.recipes;
     
     if (benchRecipes && benchRecipes.length > 0) {
         benchRecipes.forEach(recipeKey => {
             const recipe = recipes[recipeKey];
-            if (!recipe) return;
+            if (!recipe) {
+                console.warn(`Recipe not found for key: ${recipeKey}`);
+                return;
+            }
             
             const isLocked = playerLevel < recipe.levelRequired;
             const itemElement = $(`
@@ -171,6 +236,9 @@ function populateRecipes() {
                     craftQuantity = 1;
                     updateSelectedItemInfo();
                 });
+            } else {
+                itemElement.css('opacity', '0.5');
+                itemElement.css('cursor', 'not-allowed');
             }
             
             container.append(itemElement);
@@ -181,21 +249,32 @@ function populateRecipes() {
 }
 
 function updateSelectedItemInfo() {
+    console.log('Updating selected item info for:', selectedRecipe);
+    console.log('Current inventory:', playerInventory);
+    
     const recipe = recipes[selectedRecipe];
     const materialsContainer = $('#materials-list');
     materialsContainer.empty();
     
+    if (!recipe) {
+        console.error(`Recipe not found for selected item: ${selectedRecipe}`);
+        $('#selected-item-info h3').text('Select an item to craft');
+        $('#craft-btn').prop('disabled', true).text('Add to Queue');
+        return;
+    }
+    
     $('#selected-item-info h3').text(recipe.name);
     
     maxCraftable = calculateMaxCraftable(recipe);
+    console.log('Max craftable:', maxCraftable);
     
     $('#quantity-section').html(`
         <div class="quantity-controls">
             <span class="quantity-label">Quantity:</span>
             <button id="decrease-quantity" ${craftQuantity <= 1 ? 'disabled' : ''}>-</button>
-            <input type="number" id="craft-quantity" value="${craftQuantity}" min="1" max="${maxCraftable}">
-            <button id="increase-quantity" ${craftQuantity >= maxCraftable ? 'disabled' : ''}>+</button>
-            <span style="margin-left: 10px;">(Max: ${maxCraftable})</span>
+            <input type="number" id="craft-quantity" value="${craftQuantity}" min="1" max="${Math.min(maxCraftable, 100)}">
+            <button id="increase-quantity" ${craftQuantity >= Math.min(maxCraftable, 100) ? 'disabled' : ''}>+</button>
+            <span class="max-quantity">(Max: ${Math.min(maxCraftable, 100)})</span>
         </div>
     `);
     
@@ -207,7 +286,8 @@ function updateSelectedItemInfo() {
     });
     
     $('#increase-quantity').click(function() {
-        if (craftQuantity < maxCraftable) {
+        const currentMax = Math.min(maxCraftable, 100);
+        if (craftQuantity < currentMax) {
             craftQuantity++;
             updateQuantityDisplay();
         }
@@ -215,10 +295,12 @@ function updateSelectedItemInfo() {
     
     $('#craft-quantity').on('input', function() {
         let value = parseInt($(this).val());
+        const currentMax = Math.min(maxCraftable, 100);
+        
         if (isNaN(value) || value < 1) {
             value = 1;
-        } else if (value > maxCraftable) {
-            value = maxCraftable;
+        } else if (value > currentMax) {
+            value = currentMax;
         }
         craftQuantity = value;
         $(this).val(craftQuantity);
@@ -231,36 +313,35 @@ function updateSelectedItemInfo() {
         const totalNeeded = amount * craftQuantity;
         const playerHas = playerInventory[material] || 0;
         const sufficient = playerHas >= totalNeeded;
+        
+        console.log(`Material check: ${material}, Needed: ${totalNeeded}, Has: ${playerHas}, Sufficient: ${sufficient}`);
+        
         if (!sufficient) canCraft = false;
         
         materialsContainer.append(`
             <div class="material-item ${sufficient ? '' : 'insufficient'}">
                 <img src="nui://qb-inventory/html/images/${material}.png" onerror="this.src='nui://qb-inventory/html/images/placeholder.png'" class="material-icon">
-                <span>${totalNeeded}x ${material} (${playerHas})</span>
+                <span class="material-text">${totalNeeded}x ${material} <span class="inventory-count">(${playerHas} available)</span></span>
             </div>
         `);
     }
     
     materialsContainer.append(`
-        <div class="total-materials">
-            <div>Per item:</div>
-            ${Object.entries(recipe.materials).map(([material, amount]) => 
-                `<div>${amount}x ${material}</div>`
-            ).join('')}
-        </div>
-    `);
-    
-    materialsContainer.append(`
-        <div class="material-item">
+        <div class="material-item xp-gain">
+            <i class="fas fa-star" style="color: #f1c40f; margin-right: 10px;"></i>
             <span>+${recipe.xpGained * craftQuantity} XP (${recipe.xpGained} per item)</span>
         </div>
     `);
     
-    $('#craft-btn').prop('disabled', !canCraft).text(`Add to Queue (${craftQuantity}x)`);
+    const buttonText = canCraft ? `Add to Queue (${craftQuantity}x)` : 'Insufficient Materials';
+    $('#craft-btn').prop('disabled', !canCraft)
+                   .html(`<i class="fas fa-plus" style="margin-right: 5px;"></i>${buttonText}`);
 }
 
 function calculateMaxCraftable(recipe) {
-    let maxAmount = Infinity;
+    if (!recipe || !recipe.materials) return 1;
+    
+    let maxAmount = 9999;
     
     for (const [material, amount] of Object.entries(recipe.materials)) {
         const playerHas = playerInventory[material] || 0;
@@ -273,8 +354,9 @@ function calculateMaxCraftable(recipe) {
 
 function updateQuantityDisplay() {
     $('#craft-quantity').val(craftQuantity);
+    const currentMax = Math.min(maxCraftable, 100);
     $('#decrease-quantity').prop('disabled', craftQuantity <= 1);
-    $('#increase-quantity').prop('disabled', craftQuantity >= maxCraftable);
+    $('#increase-quantity').prop('disabled', craftQuantity >= currentMax);
     
     if (selectedRecipe) {
         updateSelectedItemInfo();
@@ -287,23 +369,26 @@ function updateCraftingQueue(queue) {
     container.empty();
     
     if (craftingQueue.length === 0) {
-        container.html('<div class="no-recipes">No items in queue</div>');
+        container.html('<div class="queue-empty">No items in queue</div>');
         return;
     }
     
     craftingQueue.forEach(item => {
-        const recipe = item.recipe;
+        const recipe = recipes[item.item];
         const progress = item.progress || 0;
         
         container.append(`
-            <div class="queue-item">
+            <div class="queue-item" data-id="${item.id}">
                 <img src="nui://qb-inventory/html/images/${item.item}.png" onerror="this.src='nui://qb-inventory/html/images/placeholder.png'" class="queue-item-image">
                 <div class="queue-item-info">
-                    <div class="queue-item-name">${recipe.name}</div>
-                    <div class="queue-item-quantity"><i class="fas fa-cubes" style="margin-right: 5px;"></i>Quantity: ${item.quantity}</div>
+                    <div class="queue-item-name">${recipe ? recipe.name : item.item}</div>
+                    <div class="queue-item-quantity"><i class="fas fa-cubes"></i> Quantity: ${item.quantity}</div>
                 </div>
-                <div class="queue-progress-bar">
-                    <div class="queue-progress" style="width: ${progress}%"></div>
+                <div class="queue-progress-container">
+                    <div class="queue-progress-bar">
+                        <div class="queue-progress" style="width: ${progress}%"></div>
+                    </div>
+                    <div class="queue-progress-text">${Math.round(progress)}%</div>
                 </div>
                 <button class="queue-cancel" data-id="${item.id}"><i class="fas fa-times"></i></button>
             </div>
@@ -330,15 +415,12 @@ function toggleRepairMode() {
 }
 
 function openRepairMenu(data) {
-    
     playerWeapons = data.weapons || [];
     repairCosts = data.repairCosts || {};
     playerInventory = data.inventory || {};
     playerLevel = data.level || 1;
     
-    
     populateWeaponsList();
-    
     updateRepairDetails();
 }
 
@@ -347,24 +429,23 @@ function populateWeaponsList() {
     container.empty();
     
     if (!playerWeapons || playerWeapons.length === 0) {
-        container.html('<div class="no-recipes">No weapons to repair</div>');
+        container.html('<div class="no-weapons">No weapons to repair</div>');
         return;
     }
     
     playerWeapons.forEach((weapon, index) => {
         let conditionColor;
         if (weapon.condition >= 80) {
-            conditionColor = '#2ecc71'; // Green
+            conditionColor = '#2ecc71';
         } else if (weapon.condition >= 50) {
-            conditionColor = '#f39c12'; // Orange
+            conditionColor = '#f39c12';
         } else {
-            conditionColor = '#e74c3c'; // Red
+            conditionColor = '#e74c3c';
         }
         
         const canRepair = repairCosts[weapon.name] && 
                           playerLevel >= repairCosts[weapon.name].levelRequired &&
                           weapon.condition < 100;
-        
         
         const weaponElement = $(`
             <div class="weapon-item ${!canRepair ? 'locked' : ''}" data-index="${index}">
@@ -373,11 +454,18 @@ function populateWeaponsList() {
                 <div class="weapon-condition">
                     <div class="condition-bar" style="width: ${weapon.condition}%; background-color: ${conditionColor}"></div>
                 </div>
-                <div style="color: #bdc3c7; font-size: 12px; margin-top: 5px;">${weapon.condition}%</div>
+                <div class="condition-percent">${weapon.condition}%</div>
             </div>
         `);
         
-        if (!canRepair) {
+        if (canRepair) {
+            weaponElement.click(function() {
+                $('.weapon-item').removeClass('selected');
+                $(this).addClass('selected');
+                selectedWeapon = weapon;
+                updateRepairDetails();
+            });
+        } else {
             weaponElement.css('opacity', '0.5');
             weaponElement.css('cursor', 'not-allowed');
         }
@@ -385,7 +473,6 @@ function populateWeaponsList() {
         container.append(weaponElement);
     });
 }
-
 
 function updateRepairDetails() {
     const detailsContainer = $('#repair-details');
@@ -411,27 +498,16 @@ function updateRepairDetails() {
     
     let canRepair = true;
     
-    if (!repairCost.materials) {
-        materialsList.append(`
-            <div class="material-item insufficient">
-                <span>Error: Repair materials not defined for this weapon</span>
-            </div>
-        `);
-        $('#repair-btn').prop('disabled', true);
-        return;
-    }
-    
-    
     for (const [material, amount] of Object.entries(repairCost.materials)) {
         const playerHas = playerInventory[material] || 0;
-        
         const sufficient = playerHas >= amount;
+        
         if (!sufficient) canRepair = false;
         
         materialsList.append(`
             <div class="material-item ${sufficient ? '' : 'insufficient'}">
                 <img src="nui://qb-inventory/html/images/${material}.png" onerror="this.src='nui://qb-inventory/html/images/placeholder.png'" class="material-icon">
-                <span>${amount}x ${material} (${playerHas})</span>
+                <span>${amount}x ${material} (${playerHas} available)</span>
             </div>
         `);
     }
@@ -441,7 +517,7 @@ function updateRepairDetails() {
     
     materialsList.append(`
         <div class="material-item ${levelSufficient ? '' : 'insufficient'}">
-            <i class="fas fa-star" style="color: #f1c40f; margin-right: 10px; font-size: 20px;"></i>
+            <i class="fas fa-star" style="color: #f1c40f; margin-right: 10px;"></i>
             <span>Level ${repairCost.levelRequired} Required (Current: ${playerLevel})</span>
         </div>
     `);
