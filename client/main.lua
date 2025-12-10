@@ -6,6 +6,8 @@ local isMenuOpen = false
 local currentBench = nil
 local craftingQueue = {}
 local isProcessingQueue = false
+local playerInventory = {}
+local selectedRecipe = nil
 
 RegisterNUICallback('closeMenu', function(data, cb)
     SetNuiFocus(false, false)
@@ -15,27 +17,71 @@ end)
 
 RegisterNUICallback('craftItem', function(data, cb)
     local item = data.item
-    local recipe = data.recipe
-    local quantity = data.quantity or 1
+    local quantity = tonumber(data.quantity) or 1
+    local benchType = data.benchType
     
-    table.insert(craftingQueue, {
-        item = item,
-        recipe = recipe,
-        quantity = quantity,
-        progress = 0,
-        id = math.random(1000000, 9999999) 
-    })
-    
-    SendNUIMessage({
-        action = 'updateQueue',
-        queue = craftingQueue
-    })
-    
-    if not isProcessingQueue then
-        ProcessCraftingQueue()
+    if not item then
+        QBCore.Functions.Notify("No item selected!", "error")
+        cb('error')
+        return
     end
     
-    cb('ok')
+    if not benchType and currentBench then
+        benchType = currentBench.name
+    end
+    
+    if not benchType then
+        QBCore.Functions.Notify("Bench type missing!", "error")
+        cb('error')
+        return
+    end
+    
+    if not quantity or quantity < 1 or quantity > 100 then
+        QBCore.Functions.Notify("Quantity must be between 1 and 100!", "error")
+        cb('error')
+        return
+    end
+    
+    if not Config.Recipes[item] then
+        QBCore.Functions.Notify("Cannot craft this item!", "error")
+        cb('error')
+        return
+    end
+    
+    QBCore.Functions.TriggerCallback('crafting:server:ValidateCraft', function(result)
+        if not result or not result.success then
+            local errorMsg = result and result.message or "Cannot craft"
+            QBCore.Functions.Notify(errorMsg, "error")
+            cb('error')
+            return
+        end
+        
+        local recipe = Config.Recipes[item]
+        
+        local queueItem = {
+            item = item,
+            benchType = benchType,
+            quantity = quantity,
+            progress = 0,
+            id = math.random(1000000, 9999999),
+            craftingTime = recipe.craftingTime or Config.DefaultCraftingTime,
+            validated = true,
+            crafting = false
+        }
+        
+        table.insert(craftingQueue, queueItem)
+        
+        SendNUIMessage({
+            action = 'updateQueue',
+            queue = craftingQueue
+        })
+        
+        if not isProcessingQueue then
+            ProcessCraftingQueue()
+        end
+        
+        cb('ok')
+    end, item, quantity, benchType)
 end)
 
 RegisterNUICallback('cancelCrafting', function(data, cb)
@@ -56,6 +102,30 @@ RegisterNUICallback('cancelCrafting', function(data, cb)
     cb('ok')
 end)
 
+RegisterNUICallback('selectRecipe', function(data, cb)
+    selectedRecipe = data.item
+    cb('ok')
+end)
+
+local function UpdateLocalInventory()
+    QBCore.Functions.TriggerCallback('crafting:server:GetPlayerInventory', function(inventory)
+        playerInventory = inventory
+        if isMenuOpen and currentBench then
+            SendNUIMessage({
+                action = 'updateInventory',
+                inventory = inventory
+            })
+            
+            if selectedRecipe then
+                SendNUIMessage({
+                    action = 'updateSelectedRecipe',
+                    item = selectedRecipe
+                })
+            end
+        end
+    end)
+end
+
 function ProcessCraftingQueue()
     if #craftingQueue == 0 or isProcessingQueue then return end
     
@@ -63,19 +133,21 @@ function ProcessCraftingQueue()
     
     CreateThread(function()
         while #craftingQueue > 0 do
-            local activeItems = {}
+            local hasActiveCrafts = false
+            local itemsToRemove = {}
             
             for i, queueItem in ipairs(craftingQueue) do
-                if not queueItem.crafting then
+                if not queueItem.crafting and queueItem.validated then
                     queueItem.crafting = true
                     queueItem.startTime = GetGameTimer()
-                    queueItem.endTime = queueItem.startTime + ((queueItem.recipe.craftingTime or Config.DefaultCraftingTime) * 1000)
-                    
-                    table.insert(activeItems, queueItem)
+                    queueItem.endTime = queueItem.startTime + (queueItem.craftingTime * 1000)
+                    hasActiveCrafts = true
+                elseif queueItem.crafting then
+                    hasActiveCrafts = true
                 end
             end
             
-            if #activeItems > 0 and not IsEntityPlayingAnim(PlayerPedId(), "mini@repair", "fixing_a_ped", 3) then
+            if hasActiveCrafts and not IsEntityPlayingAnim(PlayerPedId(), "mini@repair", "fixing_a_ped", 3) then
                 local ped = PlayerPedId()
                 local animDict = "mini@repair"
                 local anim = "fixing_a_ped"
@@ -89,25 +161,27 @@ function ProcessCraftingQueue()
             end
             
             local now = GetGameTimer()
-            local allCompleted = true
-            local itemsToRemove = {}
             
             for i, queueItem in ipairs(craftingQueue) do
                 if queueItem.crafting then
                     local elapsedTime = now - queueItem.startTime
                     local duration = queueItem.endTime - queueItem.startTime
-                    local progress = (elapsedTime / duration) * 100
                     
-                    if progress >= 100 then
-                        progress = 100
-                        table.insert(itemsToRemove, i)
+                    if duration > 0 then
+                        local progress = math.min((elapsedTime / duration) * 100, 100)
+                        queueItem.progress = progress
                         
-                        TriggerServerEvent('crafting:server:CraftItem', queueItem.item, queueItem.recipe, queueItem.quantity)
-                    else
-                        allCompleted = false
+                        if progress >= 100 and not queueItem.completed then
+                            queueItem.completed = true
+                            table.insert(itemsToRemove, i)
+                            
+                            TriggerServerEvent('crafting:server:CraftItem', 
+                                queueItem.item, 
+                                queueItem.quantity,
+                                queueItem.benchType
+                            )
+                        end
                     end
-                    
-                    queueItem.progress = progress
                 end
             end
             
@@ -121,7 +195,15 @@ function ProcessCraftingQueue()
                 table.remove(craftingQueue, index)
             end
             
-            if #craftingQueue == 0 or allCompleted then
+            if #itemsToRemove > 0 then
+                UpdateLocalInventory()
+            end
+            
+            if not hasActiveCrafts then
+                ClearPedTasks(PlayerPedId())
+            end
+            
+            if #craftingQueue == 0 then
                 ClearPedTasks(PlayerPedId())
                 break
             end
@@ -185,7 +267,7 @@ CreateThread(function()
                         if distance < 1.5 then
                             DrawText3D(bench.coords.x, bench.coords.y, bench.coords.z + 0.3, '[E] Use ' .. bench.name)
                             
-                            if IsControlJustReleased(0, 38) then -- 'E' key
+                            if IsControlJustReleased(0, 38) then
                                 OpenCraftingMenu(bench)
                             end
                         end
@@ -203,8 +285,11 @@ function OpenCraftingMenu(bench)
     
     currentBench = bench
     isMenuOpen = true
+    selectedRecipe = nil
     
     QBCore.Functions.TriggerCallback('crafting:server:GetPlayerInventory', function(inventory)
+        playerInventory = inventory
+        
         local filteredRecipes = {}
         
         if bench and bench.recipes then
@@ -221,6 +306,7 @@ function OpenCraftingMenu(bench)
         SendNUIMessage({
             action = 'open',
             bench = bench,
+            benchType = bench.name,
             recipes = filteredRecipes,
             level = craftingLevel,
             xp = craftingXP,
@@ -253,11 +339,10 @@ RegisterNUICallback('openRepairMenu', function(data, cb)
 end)
 
 RegisterNUICallback('repairWeapon', function(data, cb)
-    
     local weaponSlot = data.weaponHash
-    local repairCost = data.repairCost
+    local benchType = data.benchType or (currentBench and currentBench.name)
     
-    TriggerServerEvent('crafting:server:RepairWeapon', weaponSlot, repairCost)
+    TriggerServerEvent('crafting:server:RepairWeapon', weaponSlot, benchType)
     
     cb('ok')
 end)
@@ -288,15 +373,13 @@ function OpenRepairMenu(bench)
             end
         end
         
-        for itemName, amount in pairs(inventory) do
-        end
-        
         SendNUIMessage({
             action = 'openRepairMenu',
             weapons = repairableWeapons,
             repairCosts = Config.RepairCosts,
             inventory = inventory,
-            level = craftingLevel
+            level = craftingLevel,
+            benchType = bench.name
         })
         
         SetNuiFocus(true, true)
@@ -312,4 +395,3 @@ function IsWeaponRepairableAtBench(weaponName, bench)
     
     return false
 end
-
